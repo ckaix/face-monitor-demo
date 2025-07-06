@@ -15,14 +15,19 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
   const startedDetect = useRef(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [detectionCount, setDetectionCount] = useState(0);
+  const [landmarkCount, setLandmarkCount] = useState(0);
+  const [detectionMethod, setDetectionMethod] = useState<string>('');
 
   // 加载模型并设置加载状态
   useEffect(() => {
     const loadModel = async () => {
       try {
         console.log('开始加载人脸检测模型...');
-        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
-        console.log('人脸检测模型加载完成');
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
+          faceapi.nets.faceLandmark68Net.loadFromUri('/models')
+        ]);
+        console.log('人脸检测和关键点模型加载完成');
         setModelLoaded(true);
       } catch (error) {
         console.error('模型加载失败:', error);
@@ -70,7 +75,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
     const handlePlay = () => {
       if (startedDetect.current) return;
       startedDetect.current = true;
-      console.log('开始人脸检测...');
+      console.log('开始增强人脸检测...');
       
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(async () => {
@@ -81,27 +86,80 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
         }
         
         try {
-          // 大幅降低阈值，使其能够检测到部分面部特征
+          // 方法1: 基础面部检测
           const options = new faceapi.TinyFaceDetectorOptions({
             inputSize: 224,
-            scoreThreshold: 0.1  // 大幅降低阈值，提高检测灵敏度
+            scoreThreshold: 0.1
           });
           
           const detections = await faceapi.detectAllFaces(video, options);
-          setDetectionCount(detections.length);
-          console.log(`检测到 ${detections.length} 个人脸`);
+          const faceCount = detections.length;
+          
+          // 方法2: 关键点检测（如果基础检测失败）
+          let landmarkCount = 0;
+          let finalCount = faceCount;
+          let method = '基础检测';
+          
+          if (faceCount === 0) {
+            try {
+              // 尝试关键点检测
+              const facesWithLandmarks = await faceapi.detectAllFacesWithLandmarks(video, options);
+              landmarkCount = facesWithLandmarks.length;
+              
+              if (landmarkCount > 0) {
+                finalCount = landmarkCount;
+                method = '关键点检测';
+                console.log(`关键点检测成功: ${landmarkCount} 个面部`);
+                
+                // 分析关键点质量
+                facesWithLandmarks.forEach((face, index) => {
+                  if (face.landmarks) {
+                    const positions = face.landmarks.positions;
+                    console.log(`面部 ${index + 1}: 检测到 ${positions.length} 个关键点`);
+                    
+                    // 检查关键点分布（眼睛、鼻子、嘴巴等）
+                    const eyePoints = positions.slice(36, 48); // 眼睛区域
+                    const nosePoints = positions.slice(27, 36); // 鼻子区域
+                    const mouthPoints = positions.slice(48, 68); // 嘴巴区域
+                    
+                    console.log(`  眼睛关键点: ${eyePoints.length}, 鼻子关键点: ${nosePoints.length}, 嘴巴关键点: ${mouthPoints.length}`);
+                  }
+                });
+              }
+            } catch (landmarkError) {
+              console.log('关键点检测失败:', landmarkError);
+            }
+          } else {
+            // 如果基础检测成功，也尝试关键点检测来增强信心
+            try {
+              const facesWithLandmarks = await faceapi.detectAllFacesWithLandmarks(video, options);
+              landmarkCount = facesWithLandmarks.length;
+              method = '基础+关键点检测';
+              console.log(`增强检测: 基础检测 ${faceCount} 个, 关键点检测 ${landmarkCount} 个`);
+            } catch (landmarkError) {
+              console.log('增强关键点检测失败:', landmarkError);
+            }
+          }
+          
+          setDetectionCount(finalCount);
+          setLandmarkCount(landmarkCount);
+          setDetectionMethod(method);
+          
+          console.log(`检测结果: 面部=${faceCount}, 关键点=${landmarkCount}, 最终=${finalCount}, 方法=${method}`);
           
           // 添加检测结果的详细信息
           if (detections.length > 0) {
             detections.forEach((detection, index) => {
               console.log(`人脸 ${index + 1}: 置信度 ${detection.score.toFixed(3)}, 位置: ${JSON.stringify(detection.box)}`);
             });
+          } else if (landmarkCount > 0) {
+            console.log(`通过关键点检测到 ${landmarkCount} 个面部`);
           } else {
             console.log('未检测到任何人脸特征');
           }
           
           // 修正判断逻辑：只有检测到恰好1个人脸时才是normal
-          if (detections.length === 1) {
+          if (finalCount === 1) {
             console.log('检测到恰好1个人脸，状态正常');
             if (lastStatus.current !== 'normal') {
               console.log('状态切换到正常');
@@ -113,7 +171,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
           } else {
             // 检测到0个或大于1个人脸都进入pause状态
             if (lastStatus.current === 'normal') {
-              console.log(`检测到${detections.length}个人脸，状态切换到暂停`);
+              console.log(`检测到${finalCount}个人脸，状态切换到暂停`);
               onStatusChange('pause');
               lastStatus.current = 'pause';
               pauseTimer.current = setTimeout(() => {
@@ -152,7 +210,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
       />
       {!modelLoaded && (
         <div style={{ marginTop: 10, color: '#666' }}>
-          正在加载人脸检测模型...
+          正在加载人脸检测和关键点模型...
         </div>
       )}
       {modelLoaded && (
@@ -167,6 +225,16 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
             <span style={{ color: '#ffc107', fontSize: '0.9em' }}>
               (状态暂停)
             </span>
+          )}
+          {detectionMethod && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: 3 }}>
+              检测方法: {detectionMethod}
+            </div>
+          )}
+          {landmarkCount > 0 && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: 3 }}>
+              关键点检测: {landmarkCount} 个面部
+            </div>
           )}
         </div>
       )}

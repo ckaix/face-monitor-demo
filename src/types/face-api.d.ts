@@ -4,6 +4,10 @@ declare module 'face-api.js' {
     scoreThreshold?: number;
   }
 
+  export interface SsdMobilenetv1Options {
+    minConfidence?: number;
+  }
+
   export interface FaceDetection {
     box: {
       x: number;
@@ -14,6 +18,21 @@ declare module 'face-api.js' {
     score: number;
   }
 
+  export interface FaceLandmarks {
+    positions: Point[];
+    shift: Point;
+  }
+
+  export interface Point {
+    x: number;
+    y: number;
+  }
+
+  export interface DetectedFace {
+    detection: FaceDetection;
+    landmarks?: FaceLandmarks;
+  }
+
   export class TinyFaceDetectorOptions {
     constructor(options?: {
       inputSize?: number;
@@ -21,14 +40,36 @@ declare module 'face-api.js' {
     });
   }
 
+  export class SsdMobilenetv1Options {
+    constructor(options?: {
+      minConfidence?: number;
+    });
+  }
+
   export const nets: {
     tinyFaceDetector: {
+      loadFromUri(uri: string): Promise<void>;
+    };
+    ssdMobilenetv1: {
+      loadFromUri(uri: string): Promise<void>;
+    };
+    faceLandmark68Net: {
       loadFromUri(uri: string): Promise<void>;
     };
   };
 
   export function detectAllFaces(
     input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
-    options?: TinyFaceDetectorOptions
+    options?: TinyFaceDetectorOptions | SsdMobilenetv1Options
   ): Promise<FaceDetection[]>;
+
+  export function detectAllFacesWithLandmarks(
+    input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
+    options?: TinyFaceDetectorOptions | SsdMobilenetv1Options
+  ): Promise<DetectedFace[]>;
+
+  export function detectSingleFaceWithLandmarks(
+    input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
+    options?: TinyFaceDetectorOptions | SsdMobilenetv1Options
+  ): Promise<DetectedFace | undefined>;
 } 
