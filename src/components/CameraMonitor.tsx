@@ -81,10 +81,10 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
         }
         
         try {
-          // 调整检测参数，降低阈值
+          // 大幅降低阈值，使其能够检测到部分面部特征
           const options = new faceapi.TinyFaceDetectorOptions({
             inputSize: 224,
-            scoreThreshold: 0.2  // 进一步降低阈值，提高检测灵敏度
+            scoreThreshold: 0.1  // 大幅降低阈值，提高检测灵敏度
           });
           
           const detections = await faceapi.detectAllFaces(video, options);
@@ -96,9 +96,13 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
             detections.forEach((detection, index) => {
               console.log(`人脸 ${index + 1}: 置信度 ${detection.score.toFixed(3)}, 位置: ${JSON.stringify(detection.box)}`);
             });
+          } else {
+            console.log('未检测到任何人脸特征');
           }
           
+          // 修正判断逻辑：只有检测到恰好1个人脸时才是normal
           if (detections.length === 1) {
+            console.log('检测到恰好1个人脸，状态正常');
             if (lastStatus.current !== 'normal') {
               console.log('状态切换到正常');
               onStatusChange('normal');
@@ -107,8 +111,9 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
             if (pauseTimer.current) { clearTimeout(pauseTimer.current); pauseTimer.current = null; }
             if (failTimer.current) { clearTimeout(failTimer.current); failTimer.current = null; }
           } else {
+            // 检测到0个或大于1个人脸都进入pause状态
             if (lastStatus.current === 'normal') {
-              console.log('状态切换到暂停');
+              console.log(`检测到${detections.length}个人脸，状态切换到暂停`);
               onStatusChange('pause');
               lastStatus.current = 'pause';
               pauseTimer.current = setTimeout(() => {
@@ -153,6 +158,16 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
       {modelLoaded && (
         <div style={{ marginTop: 10, color: '#333' }}>
           检测到的人脸数量: {detectionCount >= 0 ? detectionCount : '检测出错'}
+          {detectionCount === 1 && (
+            <span style={{ color: '#28a745', fontSize: '0.9em' }}>
+              (状态正常)
+            </span>
+          )}
+          {(detectionCount === 0 || detectionCount > 1) && (
+            <span style={{ color: '#ffc107', fontSize: '0.9em' }}>
+              (状态暂停)
+            </span>
+          )}
         </div>
       )}
     </div>
