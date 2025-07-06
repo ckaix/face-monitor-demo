@@ -141,6 +141,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
           // 更新检测历史
           const newHistory = [...detectionHistory, bestDetectionCount].slice(-5); // 保留最近5次检测
           setDetectionHistory(newHistory);
+ 
           
           // 智能判断：如果最近几次检测中有过1个人脸，且当前检测到0个，可能是误判
           const hasRecentFace = newHistory.some(count => count >= 1);
