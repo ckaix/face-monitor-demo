@@ -15,6 +15,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
   const startedDetect = useRef(false);
   const [modelLoaded, setModelLoaded] = useState(false);
   const [detectionCount, setDetectionCount] = useState(0);
+  const [detectionHistory, setDetectionHistory] = useState<number[]>([]);
 
   // 加载模型并设置加载状态
   useEffect(() => {
@@ -81,15 +82,73 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
         }
         
         try {
-          // 大幅降低阈值，使其能够检测到部分面部特征
-          const options = new faceapi.TinyFaceDetectorOptions({
-            inputSize: 224,
-            scoreThreshold: 0.1  // 大幅降低阈值，提高检测灵敏度
-          });
+          // 尝试多种检测策略
+          let detections: any[] = [];
+          let bestDetectionCount = 0;
           
-          const detections = await faceapi.detectAllFaces(video, options);
-          setDetectionCount(detections.length);
-          console.log(`检测到 ${detections.length} 个人脸`);
+          // 策略1: 极低阈值检测
+          try {
+            const options1 = new faceapi.TinyFaceDetectorOptions({
+              inputSize: 160,
+              scoreThreshold: 0.01  // 极低阈值
+            });
+            const detections1 = await faceapi.detectAllFaces(video, options1);
+            console.log(`策略1检测到 ${detections1.length} 个人脸`);
+            if (detections1.length > 0) {
+              detections = detections1;
+              bestDetectionCount = detections1.length;
+            }
+          } catch (e) {
+            console.log('策略1失败:', e);
+          }
+          
+          // 策略2: 如果策略1失败，尝试更小的inputSize
+          if (detections.length === 0) {
+            try {
+              const options2 = new faceapi.TinyFaceDetectorOptions({
+                inputSize: 128,
+                scoreThreshold: 0.05
+              });
+              const detections2 = await faceapi.detectAllFaces(video, options2);
+              console.log(`策略2检测到 ${detections2.length} 个人脸`);
+              if (detections2.length > 0) {
+                detections = detections2;
+                bestDetectionCount = detections2.length;
+              }
+            } catch (e) {
+              console.log('策略2失败:', e);
+            }
+          }
+          
+          // 策略3: 如果前两个策略都失败，尝试标准参数
+          if (detections.length === 0) {
+            try {
+              const options3 = new faceapi.TinyFaceDetectorOptions({
+                inputSize: 224,
+                scoreThreshold: 0.1
+              });
+              const detections3 = await faceapi.detectAllFaces(video, options3);
+              console.log(`策略3检测到 ${detections3.length} 个人脸`);
+              if (detections3.length > 0) {
+                detections = detections3;
+                bestDetectionCount = detections3.length;
+              }
+            } catch (e) {
+              console.log('策略3失败:', e);
+            }
+          }
+          
+          // 更新检测历史
+          const newHistory = [...detectionHistory, bestDetectionCount].slice(-5); // 保留最近5次检测
+          setDetectionHistory(newHistory);
+          
+          // 智能判断：如果最近几次检测中有过1个人脸，且当前检测到0个，可能是误判
+          const hasRecentFace = newHistory.some(count => count >= 1);
+          const finalCount = bestDetectionCount === 0 && hasRecentFace ? 1 : bestDetectionCount;
+          
+          setDetectionCount(finalCount);
+          console.log(`最终检测结果: ${finalCount} 个人脸 (原始: ${bestDetectionCount})`);
+          console.log(`检测历史: [${newHistory.join(', ')}]`);
           
           // 添加检测结果的详细信息
           if (detections.length > 0) {
@@ -97,11 +156,11 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
               console.log(`人脸 ${index + 1}: 置信度 ${detection.score.toFixed(3)}, 位置: ${JSON.stringify(detection.box)}`);
             });
           } else {
-            console.log('未检测到任何人脸特征');
+            console.log('所有策略都未检测到人脸');
           }
           
           // 修正判断逻辑：只有检测到恰好1个人脸时才是normal
-          if (detections.length === 1) {
+          if (finalCount === 1) {
             console.log('检测到恰好1个人脸，状态正常');
             if (lastStatus.current !== 'normal') {
               console.log('状态切换到正常');
@@ -113,7 +172,7 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
           } else {
             // 检测到0个或大于1个人脸都进入pause状态
             if (lastStatus.current === 'normal') {
-              console.log(`检测到${detections.length}个人脸，状态切换到暂停`);
+              console.log(`检测到${finalCount}个人脸，状态切换到暂停`);
               onStatusChange('pause');
               lastStatus.current = 'pause';
               pauseTimer.current = setTimeout(() => {
@@ -167,6 +226,11 @@ const CameraMonitor: React.FC<CameraMonitorProps> = ({ running, onStatusChange }
             <span style={{ color: '#ffc107', fontSize: '0.9em' }}>
               (状态暂停)
             </span>
+          )}
+          {detectionHistory.length > 0 && (
+            <div style={{ fontSize: '0.8em', color: '#666', marginTop: 5 }}>
+              检测历史: [{detectionHistory.join(', ')}]
+            </div>
           )}
         </div>
       )}

@@ -4,6 +4,10 @@ declare module 'face-api.js' {
     scoreThreshold?: number;
   }
 
+  export interface SsdMobilenetv1Options {
+    minConfidence?: number;
+  }
+
   export interface FaceDetection {
     box: {
       x: number;
@@ -21,14 +25,23 @@ declare module 'face-api.js' {
     });
   }
 
+  export class SsdMobilenetv1Options {
+    constructor(options?: {
+      minConfidence?: number;
+    });
+  }
+
   export const nets: {
     tinyFaceDetector: {
+      loadFromUri(uri: string): Promise<void>;
+    };
+    ssdMobilenetv1: {
       loadFromUri(uri: string): Promise<void>;
     };
   };
 
   export function detectAllFaces(
     input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
-    options?: TinyFaceDetectorOptions
+    options?: TinyFaceDetectorOptions | SsdMobilenetv1Options
   ): Promise<FaceDetection[]>;
 } 
