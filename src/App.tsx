@@ -129,11 +129,12 @@
 // export default SnapToEdge;
 
 import SnapToEdge from './components/Test';
+import VideoWithOverlay from "./components/InterceptVideoPlayer";
 
 export default function App() {
   return (
-    <div className="App">
-      <SnapToEdge />
-    </div>
+    <>
+      <VideoWithOverlay />
+    </>
   );
 }
