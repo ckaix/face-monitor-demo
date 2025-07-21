@@ -13,12 +13,14 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
     "@tailwindcss/vite": "^4.1.11",
     "@types/node": "^24.0.10",
     "face-api.js": "^0.22.2",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "react-player": "2.16",
+    "react-webcam": "^7.2.0",
     "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
